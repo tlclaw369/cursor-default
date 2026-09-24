@@ -1,0 +1,13 @@
+services:
+  zoneboard:
+    build: .
+    ports:
+      - "${ZONEBOARD_PORT:-8787}:8787"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8787"
+      # Real Cloudflare API by default. Override in .env if needed.
+      API_BASE_URL: ${API_BASE_URL:-https://api.cloudflare.com/client/v4}
+      # Set to 1 only when the app is served behind HTTPS so Secure cookies are set.
+      FORCE_HTTPS: ${FORCE_HTTPS:-0}
+    restart: unless-stopped

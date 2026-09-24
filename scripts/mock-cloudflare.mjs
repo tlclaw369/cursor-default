@@ -146,8 +146,9 @@ const server = createServer(async (req, res) => {
   send(res, 404, { success: false, errors: [{ message: "Not found" }] });
 });
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`Mock Cloudflare API at http://127.0.0.1:${port}/client/v4`);
+const host = process.env.HOST || "0.0.0.0";
+server.listen(port, host, () => {
+  console.log(`Mock Cloudflare API at http://${host}:${port}/client/v4`);
 });
 
 function send(res, status, body) {

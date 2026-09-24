@@ -22,7 +22,35 @@ npm run dev
 
 Open the URL Wrangler prints (usually http://127.0.0.1:8787) and paste the token.
 
-## Deploy
+## Deploy with Docker Compose
+
+Yes. You can self-host Zoneboard with Docker Compose on your own machine or VPS.
+
+```bash
+docker compose up --build -d
+```
+
+Then open http://127.0.0.1:8787 and paste your Cloudflare API token.
+
+Optional settings in a `.env` file next to `docker-compose.yml`:
+
+```bash
+ZONEBOARD_PORT=8787
+API_BASE_URL=https://api.cloudflare.com/client/v4
+FORCE_HTTPS=0
+```
+
+Set `FORCE_HTTPS=1` only when the app is reached over HTTPS (for example behind a reverse proxy with TLS), so the session cookie is marked Secure.
+
+Try the UI without a live Cloudflare token:
+
+```bash
+docker compose -f docker-compose.mock.yml up --build
+```
+
+Paste any token that is at least 20 characters. The sample domains are `example.com` and `campaigns.test`.
+
+## Deploy to Cloudflare Workers
 
 ```bash
 npx wrangler login
@@ -31,7 +59,7 @@ npm run deploy
 
 Then open the `workers.dev` URL, or attach a custom domain, and connect with the same kind of token.
 
-## Preview without a live token
+## Preview without Docker
 
 A local stand-in API is included so the interface can be tried without calling Cloudflare:
 
@@ -45,7 +73,11 @@ In another terminal, point the app at it:
 npx wrangler dev --var API_BASE_URL:http://127.0.0.1:3999/client/v4
 ```
 
-Paste any token that is at least 20 characters. The sample domains are `example.com` and `campaigns.test`.
+Or run the same Node server Docker uses:
+
+```bash
+API_BASE_URL=http://127.0.0.1:3999/client/v4 npm start
+```
 
 ## Checks
 
