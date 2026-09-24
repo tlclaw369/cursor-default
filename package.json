@@ -1,0 +1,21 @@
+{
+  "name": "zoneboard",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A simple web app for managing Cloudflare domains and DNS records.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "types": "wrangler types",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260924.1",
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.137.0"
+  }
+}

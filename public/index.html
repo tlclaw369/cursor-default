@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zoneboard · Cloudflare domains and DNS</title>
+    <meta
+      name="description"
+      content="Connect your Cloudflare account and manage domains and DNS records."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,650&family=Outfit:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main id="connect-view" class="connect">
+      <section class="connect-card">
+        <p class="eyebrow">Cloudflare account</p>
+        <h1>Zoneboard</h1>
+        <p class="lede">
+          A quiet desk for your domains. Connect an API token, then add or remove DNS records for any zone on the account.
+        </p>
+        <ol class="steps">
+          <li>
+            Open
+            <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">API tokens</a>
+            in Cloudflare.
+          </li>
+          <li>Create a token with the <strong>Edit zone DNS</strong> template.</li>
+          <li>Paste it here. It stays in this browser session and is never written into the app.</li>
+        </ol>
+        <form id="connect-form">
+          <label for="token">API token</label>
+          <div class="token-row">
+            <input
+              id="token"
+              class="secret"
+              name="api-token"
+              type="text"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+              required
+              minlength="20"
+              placeholder="Paste the token Cloudflare showed once"
+            />
+            <button id="toggle-token" type="button">Show</button>
+          </div>
+          <p id="connect-error" class="form-error" role="alert" hidden></p>
+          <button class="primary" type="submit">Connect account</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="app-view" class="app" hidden>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Zoneboard</p>
+          <h1>Your domains</h1>
+        </div>
+        <button id="disconnect" class="ghost" type="button">Disconnect</button>
+      </header>
+      <div class="shell">
+        <aside class="sidebar">
+          <label class="search" for="zone-search">
+            <span>Search domains</span>
+            <input id="zone-search" type="search" placeholder="example.com" autocomplete="off" />
+          </label>
+          <p id="zone-meta" class="meta"></p>
+          <ul id="zone-list" class="zone-list"></ul>
+        </aside>
+        <section class="workspace" aria-live="polite">
+          <div id="zone-empty" class="empty">
+            <h2>Pick a domain</h2>
+            <p>The DNS records for that domain will show up here, ready to add or remove.</p>
+          </div>
+          <div id="zone-detail" hidden>
+            <header class="zone-head">
+              <div>
+                <p id="zone-account" class="eyebrow"></p>
+                <h2 id="zone-name"></h2>
+                <p id="zone-status" class="status-line"></p>
+              </div>
+              <button id="add-record" class="primary" type="button">Add record</button>
+            </header>
+            <p id="nameservers" class="nameservers"></p>
+            <div class="toolbar">
+              <label class="search compact" for="record-search">
+                <span>Search records</span>
+                <input id="record-search" type="search" placeholder="Name or value" autocomplete="off" />
+              </label>
+              <label class="search compact" for="record-type">
+                <span>Type</span>
+                <select id="record-type">
+                  <option value="ALL">All types</option>
+                  <option>A</option>
+                  <option>AAAA</option>
+                  <option>CNAME</option>
+                  <option>TXT</option>
+                  <option>MX</option>
+                  <option>NS</option>
+                  <option>CAA</option>
+                  <option>SRV</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </label>
+              <button id="refresh-records" class="ghost" type="button">Refresh</button>
+            </div>
+            <p id="record-meta" class="meta"></p>
+            <p id="records-error" class="form-error" role="alert" hidden></p>
+            <div class="table-wrap">
+              <table>
+                <caption class="sr-only">DNS records for the selected domain</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Type</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Value</th>
+                    <th scope="col">Proxy</th>
+                    <th scope="col">TTL</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody id="record-rows"></tbody>
+              </table>
+            </div>
+            <p id="records-empty" class="empty inline" hidden>No records match this view.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <dialog id="record-dialog">
+      <form id="record-form">
+        <p id="record-dialog-kicker" class="eyebrow">DNS record</p>
+        <h2 id="record-dialog-title">Add a record</h2>
+        <p id="record-hint" class="hint"></p>
+        <div class="fields">
+          <label for="field-type">Type
+            <select id="field-type" name="type" required>
+              <option value="A">A · IPv4 address</option>
+              <option value="AAAA">AAAA · IPv6 address</option>
+              <option value="CNAME">CNAME · another hostname</option>
+              <option value="TXT">TXT · text</option>
+              <option value="MX">MX · mail server</option>
+              <option value="NS">NS · name server</option>
+              <option value="CAA">CAA · certificate authority</option>
+              <option value="SRV">SRV · service</option>
+            </select>
+          </label>
+          <label for="field-name">Name
+            <input id="field-name" name="name" required placeholder="@ or www" autocomplete="off" />
+          </label>
+          <label id="content-label" for="field-content">
+            <span id="content-label-text">IPv4 address</span>
+            <input id="field-content" name="content" autocomplete="off" />
+          </label>
+          <label id="txt-label" for="field-txt" hidden>Text
+            <textarea id="field-txt" name="txt" rows="3"></textarea>
+          </label>
+          <div id="mx-fields" class="split" hidden>
+            <label for="field-priority">Priority
+              <input id="field-priority" name="priority" type="number" min="0" max="65535" value="10" />
+            </label>
+          </div>
+          <div id="srv-fields" class="split" hidden>
+            <label for="field-srv-priority">Priority
+              <input id="field-srv-priority" name="srvPriority" type="number" min="0" max="65535" value="0" />
+            </label>
+            <label for="field-weight">Weight
+              <input id="field-weight" name="weight" type="number" min="0" max="65535" value="0" />
+            </label>
+            <label for="field-port">Port
+              <input id="field-port" name="port" type="number" min="0" max="65535" value="443" />
+            </label>
+            <label for="field-target">Target host
+              <input id="field-target" name="target" placeholder="sip.example.com" autocomplete="off" />
+            </label>
+          </div>
+          <label for="field-ttl">TTL
+            <select id="field-ttl" name="ttl">
+              <option value="1">Automatic</option>
+              <option value="120">2 minutes</option>
+              <option value="300">5 minutes</option>
+              <option value="3600">1 hour</option>
+              <option value="86400">1 day</option>
+              <option value="custom">Custom seconds</option>
+            </select>
+          </label>
+          <label id="custom-ttl-label" for="field-ttl-custom" hidden>Seconds
+            <input id="field-ttl-custom" name="ttlCustom" type="number" min="60" max="86400" />
+          </label>
+          <label id="proxy-label" class="check">
+            <input id="field-proxied" name="proxied" type="checkbox" />
+            <span>Proxy this record through Cloudflare. Leave it off to publish DNS only.</span>
+          </label>
+          <label for="field-comment">Note <span class="optional">optional</span>
+            <input id="field-comment" name="comment" maxlength="500" autocomplete="off" />
+          </label>
+        </div>
+        <p id="record-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button id="record-cancel" class="ghost" type="button">Cancel</button>
+          <button id="record-save" class="primary" type="submit">Save record</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirm-dialog">
+      <form id="confirm-form">
+        <p class="eyebrow">Remove record</p>
+        <h2 id="confirm-title">Remove this record?</h2>
+        <p id="confirm-copy"></p>
+        <div class="dialog-actions">
+          <button id="confirm-cancel" class="ghost" type="button">Keep it</button>
+          <button id="confirm-delete" class="danger" type="submit">Remove record</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
