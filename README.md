@@ -50,6 +50,38 @@ docker compose -f docker-compose.mock.yml up --build
 
 Paste any token that is at least 20 characters. The sample domains are `example.com` and `campaigns.test`.
 
+## Connect Pangolin and create public resources
+
+Zoneboard can also talk to your Pangolin reverse proxy through the [Integration API](https://docs.pangolin.net/manage/integration-api). After Cloudflare is connected:
+
+1. Click **Connect Pangolin**.
+2. Enter the API base URL (`https://api.pangolin.net/v1` for Pangolin Cloud, or `https://api.your-domain.com/v1` for self-hosted).
+3. Enter your [organization ID](https://docs.pangolin.net/manage/organizations/org-id) and an organization API key with permissions for domains, sites, and public resources.
+4. When you add a DNS record, check **Also create a Pangolin public HTTP resource**.
+5. Choose the Pangolin domain and site, then enter the target host/IP and port on that site.
+
+That follows the [common API routes](https://docs.pangolin.net/manage/common-api-routes) flow:
+
+- `PUT /org/{orgId}/public-resource` with `mode: "http"`
+- `PUT /public-resource/{resourceId}/target` with the site backend
+
+If DNS succeeds and Pangolin fails, the DNS record is kept and Zoneboard shows the Pangolin error. When removing a DNS record, you can optionally delete the matching Pangolin public resource too.
+
+Local stand-ins:
+
+```bash
+node scripts/mock-cloudflare.mjs
+node scripts/mock-pangolin.mjs
+```
+
+Then run Zoneboard against them:
+
+```bash
+API_BASE_URL=http://127.0.0.1:3999/client/v4 npm start
+```
+
+In the UI, connect Pangolin with base URL `http://127.0.0.1:4000/v1`, org ID `demo-org`, and any API key of 20+ characters.
+
 ## Deploy to Cloudflare Workers
 
 ```bash

@@ -23,6 +23,13 @@ const state = {
   recordType: "ALL",
   editingId: "",
   pendingDelete: null,
+  pangolin: {
+    connected: false,
+    baseUrl: "",
+    orgId: "",
+    domains: [],
+    sites: [],
+  },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -37,6 +44,11 @@ async function api(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (response.status === 401) {
+    if (path.startsWith("/api/pangolin/")) {
+      state.pangolin.connected = false;
+      renderPangolinStatus();
+      throw new Error(data.error || "Connect your Pangolin organization to continue.");
+    }
     showConnect(data.error || "Connect your Cloudflare account to continue.");
     throw new Error(data.error || "Connect your Cloudflare account to continue.");
   }
@@ -101,7 +113,48 @@ async function boot() {
     return;
   }
   showApp();
+  await loadPangolinSession();
   await loadZones();
+}
+
+async function loadPangolinSession() {
+  try {
+    const session = await api("/api/pangolin/session");
+    state.pangolin.connected = Boolean(session.connected);
+    state.pangolin.baseUrl = session.baseUrl || "";
+    state.pangolin.orgId = session.orgId || "";
+    if (state.pangolin.connected) {
+      await loadPangolinCatalog();
+    }
+  } catch {
+    state.pangolin.connected = false;
+  }
+  renderPangolinStatus();
+}
+
+async function loadPangolinCatalog() {
+  const [domains, sites] = await Promise.all([
+    api("/api/pangolin/domains"),
+    api("/api/pangolin/sites"),
+  ]);
+  state.pangolin.domains = domains.domains || [];
+  state.pangolin.sites = sites.sites || [];
+}
+
+function renderPangolinStatus() {
+  const status = $("#pangolin-status");
+  const connectBtn = $("#pangolin-connect");
+  const disconnectBtn = $("#pangolin-disconnect");
+  if (!status) return;
+  if (state.pangolin.connected) {
+    status.textContent = `Pangolin connected · org ${state.pangolin.orgId}`;
+    connectBtn.hidden = true;
+    disconnectBtn.hidden = false;
+  } else {
+    status.textContent = "Pangolin is optional. Connect it to create public resources when you add DNS records.";
+    connectBtn.hidden = false;
+    disconnectBtn.hidden = true;
+  }
 }
 
 async function loadZones() {
@@ -342,9 +395,43 @@ function openRecordDialog(record) {
   } else {
     setTtl(1);
   }
+  setupPangolinPublishFields(record);
   syncRecordFields();
   $("#record-dialog").showModal();
   $("#field-name").focus();
+}
+
+function setupPangolinPublishFields(record) {
+  const box = $("#pangolin-publish");
+  const create = !record && state.pangolin.connected;
+  box.hidden = !create;
+  $("#field-pangolin-create").checked = false;
+  $("#pangolin-fields").hidden = true;
+  if (!create) return;
+
+  const zone = selectedZone();
+  const domainSelect = $("#field-pangolin-domain");
+  const siteSelect = $("#field-pangolin-site");
+  domainSelect.replaceChildren();
+  siteSelect.replaceChildren();
+  for (const domain of state.pangolin.domains) {
+    const option = document.createElement("option");
+    option.value = domain.domainId;
+    option.textContent = `${domain.baseDomain}${domain.verified ? "" : " (unverified)"} · ${domain.type || "domain"}`;
+    domainSelect.append(option);
+  }
+  for (const site of state.pangolin.sites) {
+    const option = document.createElement("option");
+    option.value = String(site.siteId);
+    option.textContent = `${site.name}${site.online ? "" : " (offline)"}`;
+    siteSelect.append(option);
+  }
+  const relative = zone ? ($("#field-name").value || "").trim() : "";
+  $("#field-pangolin-name").value = relative && relative !== "@" ? relative : zone?.name || "";
+  $("#field-pangolin-subdomain").value = relative && relative !== "@" ? relative : "";
+  $("#field-pangolin-ip").value = "localhost";
+  $("#field-pangolin-port").value = "80";
+  $("#field-pangolin-method").value = "http";
 }
 
 function setTtl(ttl) {
@@ -386,7 +473,7 @@ function recordPayload() {
   const type = $("#field-type").value;
   const ttlChoice = $("#field-ttl").value;
   const ttl = ttlChoice === "custom" ? Number($("#field-ttl-custom").value) : Number(ttlChoice);
-  return {
+  const payload = {
     type,
     name: $("#field-name").value,
     content: type === "TXT" ? $("#field-txt").value : $("#field-content").value,
@@ -398,6 +485,19 @@ function recordPayload() {
     target: $("#field-target").value,
     comment: $("#field-comment").value,
   };
+  if (!state.editingId && state.pangolin.connected && $("#field-pangolin-create").checked) {
+    payload.pangolin = {
+      create: true,
+      name: $("#field-pangolin-name").value.trim(),
+      domainId: $("#field-pangolin-domain").value,
+      subdomain: $("#field-pangolin-subdomain").value.trim() || null,
+      siteId: Number($("#field-pangolin-site").value),
+      ip: $("#field-pangolin-ip").value.trim(),
+      port: Number($("#field-pangolin-port").value),
+      method: $("#field-pangolin-method").value,
+    };
+  }
+  return payload;
 }
 
 function openDeleteDialog(record) {
@@ -406,6 +506,10 @@ function openDeleteDialog(record) {
   const name = zone ? displayName(record.name, zone.name) : record.name;
   $("#confirm-title").textContent = `Remove the ${record.type} record for ${name}?`;
   $("#confirm-copy").textContent = `${record.name} currently publishes ${record.content || "this value"}. Removing it stops that answer from being served.`;
+  const pangolinLabel = $("#confirm-pangolin-label");
+  const pangolinCheck = $("#confirm-pangolin");
+  pangolinLabel.hidden = !state.pangolin.connected;
+  pangolinCheck.checked = false;
   $("#confirm-dialog").showModal();
 }
 
@@ -453,7 +557,73 @@ $("#disconnect").addEventListener("click", async () => {
   state.selectedId = "";
   sessionStorage.removeItem("zoneboard-zone");
   showConnect();
-  toast("Disconnected.");
+  toast("Disconnected Cloudflare.");
+});
+
+$("#pangolin-connect").addEventListener("click", () => {
+  $("#pangolin-error").hidden = true;
+  $("#pangolin-dialog").showModal();
+});
+
+$("#pangolin-cancel").addEventListener("click", () => $("#pangolin-dialog").close());
+
+$("#pangolin-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector("button[type=submit]");
+  button.disabled = true;
+  $("#pangolin-error").hidden = true;
+  try {
+    const data = await api("/api/pangolin/session", {
+      method: "POST",
+      body: JSON.stringify({
+        baseUrl: $("#pangolin-base-url").value.trim(),
+        orgId: $("#pangolin-org-id").value.trim(),
+        apiKey: $("#pangolin-api-key").value.trim(),
+      }),
+    });
+    state.pangolin.connected = true;
+    state.pangolin.baseUrl = data.baseUrl;
+    state.pangolin.orgId = data.orgId;
+    $("#pangolin-api-key").value = "";
+    await loadPangolinCatalog();
+    renderPangolinStatus();
+    $("#pangolin-dialog").close();
+    toast("Connected to Pangolin.");
+  } catch (error) {
+    $("#pangolin-error").hidden = false;
+    $("#pangolin-error").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#pangolin-disconnect").addEventListener("click", async () => {
+  await api("/api/pangolin/session", { method: "DELETE" });
+  state.pangolin = { connected: false, baseUrl: "", orgId: "", domains: [], sites: [] };
+  renderPangolinStatus();
+  toast("Disconnected Pangolin.");
+});
+
+$("#field-pangolin-create").addEventListener("change", (event) => {
+  $("#pangolin-fields").hidden = !event.target.checked;
+});
+
+$("#field-name").addEventListener("input", () => {
+  if (!$("#field-pangolin-create").checked) return;
+  const relative = $("#field-name").value.trim();
+  if (!$("#field-pangolin-name").dataset.touched) {
+    $("#field-pangolin-name").value = relative && relative !== "@" ? relative : selectedZone()?.name || "";
+  }
+  if (!$("#field-pangolin-subdomain").dataset.touched) {
+    $("#field-pangolin-subdomain").value = relative && relative !== "@" ? relative : "";
+  }
+});
+
+$("#field-pangolin-name").addEventListener("input", (event) => {
+  event.currentTarget.dataset.touched = "1";
+});
+$("#field-pangolin-subdomain").addEventListener("input", (event) => {
+  event.currentTarget.dataset.touched = "1";
 });
 
 $("#zone-search").addEventListener("input", (event) => {
@@ -494,14 +664,20 @@ $("#record-form").addEventListener("submit", async (event) => {
     ? `/api/zones/${zone.id}/records/${state.editingId}`
     : `/api/zones/${zone.id}/records`;
   try {
-    await api(path, {
+    const created = await api(path, {
       method: state.editingId ? "PATCH" : "POST",
       body: JSON.stringify(recordPayload()),
     });
     const wasEdit = Boolean(state.editingId);
     $("#record-dialog").close();
     await loadRecords();
-    toast(wasEdit ? "Record updated." : "Record added.");
+    if (created.warning) {
+      toast(created.warning, "error");
+    } else if (created.pangolin?.resource?.fullDomain) {
+      toast(`Record added and Pangolin resource ${created.pangolin.resource.fullDomain} created.`);
+    } else {
+      toast(wasEdit ? "Record updated." : "Record added.");
+    }
   } catch (error) {
     if ($("#record-dialog").open) {
       $("#record-error").hidden = false;
@@ -522,11 +698,15 @@ $("#confirm-form").addEventListener("submit", async (event) => {
   const button = $("#confirm-delete");
   button.disabled = true;
   try {
-    await api(`/api/zones/${zone.id}/records/${record.id}`, { method: "DELETE" });
+    const removePangolin = state.pangolin.connected && $("#confirm-pangolin").checked;
+    const path = `/api/zones/${zone.id}/records/${record.id}${removePangolin ? "?pangolin=1" : ""}`;
+    const result = await api(path, { method: "DELETE" });
     $("#confirm-dialog").close();
     state.pendingDelete = null;
     await loadRecords();
-    toast("Record removed.");
+    if (result.warning) toast(result.warning, "error");
+    else if (result.pangolin?.fullDomain) toast(`Record removed and Pangolin resource ${result.pangolin.fullDomain} deleted.`);
+    else toast("Record removed.");
   } catch (error) {
     toast(error.message, "error");
   } finally {
