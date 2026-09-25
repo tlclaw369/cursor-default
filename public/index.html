@@ -64,8 +64,13 @@
           <p class="eyebrow">Zoneboard</p>
           <h1>Your domains</h1>
         </div>
-        <button id="disconnect" class="ghost" type="button">Disconnect</button>
+        <div class="topbar-actions">
+          <button id="pangolin-connect" class="ghost" type="button">Connect Pangolin</button>
+          <button id="pangolin-disconnect" class="ghost" type="button" hidden>Disconnect Pangolin</button>
+          <button id="disconnect" class="ghost" type="button">Disconnect Cloudflare</button>
+        </div>
       </header>
+      <p id="pangolin-status" class="pangolin-status meta"></p>
       <div class="shell">
         <aside class="sidebar">
           <label class="search" for="zone-search">
@@ -203,6 +208,41 @@
           <label for="field-comment">Note <span class="optional">optional</span>
             <input id="field-comment" name="comment" maxlength="500" autocomplete="off" />
           </label>
+          <div id="pangolin-publish" class="pangolin-box" hidden>
+            <label class="check">
+              <input id="field-pangolin-create" name="pangolinCreate" type="checkbox" />
+              <span>Also create a Pangolin public HTTP resource for this hostname</span>
+            </label>
+            <p class="hint">Uses the Pangolin Integration API to create the public resource and a target on your site.</p>
+            <div id="pangolin-fields" class="fields nested" hidden>
+              <label for="field-pangolin-name">Resource name
+                <input id="field-pangolin-name" name="pangolinName" autocomplete="off" />
+              </label>
+              <label for="field-pangolin-domain">Pangolin domain
+                <select id="field-pangolin-domain" name="pangolinDomain"></select>
+              </label>
+              <label for="field-pangolin-subdomain">Subdomain <span class="optional">blank for base domain</span>
+                <input id="field-pangolin-subdomain" name="pangolinSubdomain" placeholder="app" autocomplete="off" />
+              </label>
+              <label for="field-pangolin-site">Site
+                <select id="field-pangolin-site" name="pangolinSite"></select>
+              </label>
+              <div class="split">
+                <label for="field-pangolin-ip">Target host or IP
+                  <input id="field-pangolin-ip" name="pangolinIp" placeholder="localhost" autocomplete="off" />
+                </label>
+                <label for="field-pangolin-port">Port
+                  <input id="field-pangolin-port" name="pangolinPort" type="number" min="1" max="65535" value="80" />
+                </label>
+              </div>
+              <label for="field-pangolin-method">Target method
+                <select id="field-pangolin-method" name="pangolinMethod">
+                  <option value="http">http</option>
+                  <option value="https">https</option>
+                </select>
+              </label>
+            </div>
+          </div>
         </div>
         <p id="record-error" class="form-error" role="alert" hidden></p>
         <div class="dialog-actions">
@@ -217,9 +257,43 @@
         <p class="eyebrow">Remove record</p>
         <h2 id="confirm-title">Remove this record?</h2>
         <p id="confirm-copy"></p>
+        <label id="confirm-pangolin-label" class="check" hidden>
+          <input id="confirm-pangolin" type="checkbox" />
+          <span>Also delete the matching Pangolin public resource, if one exists for this hostname</span>
+        </label>
         <div class="dialog-actions">
           <button id="confirm-cancel" class="ghost" type="button">Keep it</button>
           <button id="confirm-delete" class="danger" type="submit">Remove record</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="pangolin-dialog">
+      <form id="pangolin-form">
+        <p class="eyebrow">Pangolin</p>
+        <h2>Connect reverse proxy</h2>
+        <p class="hint">
+          Create an organization API key in Pangolin with permission for domains, sites, and public resources.
+          See the
+          <a href="https://docs.pangolin.net/manage/integration-api" target="_blank" rel="noreferrer">Integration API</a>
+          and
+          <a href="https://docs.pangolin.net/manage/common-api-routes" target="_blank" rel="noreferrer">common API routes</a>.
+        </p>
+        <div class="fields">
+          <label for="pangolin-base-url">API base URL
+            <input id="pangolin-base-url" name="baseUrl" value="https://api.pangolin.net/v1" autocomplete="off" />
+          </label>
+          <label for="pangolin-org-id">Organization ID
+            <input id="pangolin-org-id" name="orgId" required autocomplete="off" placeholder="your-org-id" />
+          </label>
+          <label for="pangolin-api-key">API key
+            <input id="pangolin-api-key" class="secret" name="apiKey" required minlength="20" autocomplete="off" />
+          </label>
+        </div>
+        <p id="pangolin-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button id="pangolin-cancel" class="ghost" type="button">Cancel</button>
+          <button class="primary" type="submit">Connect Pangolin</button>
         </div>
       </form>
     </dialog>

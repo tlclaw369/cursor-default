@@ -9,9 +9,16 @@ export class HttpError extends Error {
 }
 
 export function json(body: unknown, status = 200, extraHeaders?: HeadersInit): Response {
-  const headers = new Headers(extraHeaders);
+  const headers = new Headers();
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", "no-store");
+  if (extraHeaders) {
+    const extra = new Headers(extraHeaders);
+    extra.forEach((value, key) => {
+      if (key.toLowerCase() === "set-cookie") headers.append(key, value);
+      else headers.set(key, value);
+    });
+  }
   return new Response(JSON.stringify(body), { status, headers });
 }
 
@@ -20,26 +27,29 @@ export function jsonError(status: number, message: string, extraHeaders?: Header
 }
 
 const SESSION_COOKIE = "zoneboard_session";
+const PANGOLIN_COOKIE = "zoneboard_pangolin";
 const SESSION_MAX_AGE = 60 * 60 * 8;
 
-export function readSessionToken(request: Request): string | null {
+export function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");
   if (!header) return null;
   for (const part of header.split(";")) {
     const trimmed = part.trim();
     const separator = trimmed.indexOf("=");
     if (separator === -1) continue;
-    const name = trimmed.slice(0, separator);
-    if (name !== SESSION_COOKIE) continue;
-    const raw = trimmed.slice(separator + 1);
+    if (trimmed.slice(0, separator) !== name) continue;
     try {
-      const token = decodeURIComponent(raw);
-      return isAcceptableToken(token) ? token : null;
+      return decodeURIComponent(trimmed.slice(separator + 1));
     } catch {
       return null;
     }
   }
   return null;
+}
+
+export function readSessionToken(request: Request): string | null {
+  const token = readCookie(request, SESSION_COOKIE);
+  return token && isAcceptableToken(token) ? token : null;
 }
 
 export function sessionCookie(token: string, request: Request): string {
@@ -50,8 +60,50 @@ export function clearSessionCookie(request: Request): string {
   return `${SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${secureFlag(request)}`;
 }
 
+export type PangolinCookieSession = {
+  baseUrl: string;
+  orgId: string;
+  apiKey: string;
+};
+
+export function readPangolinSession(request: Request): PangolinCookieSession | null {
+  const raw = readCookie(request, PANGOLIN_COOKIE);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<PangolinCookieSession>;
+    if (
+      typeof parsed.baseUrl !== "string" ||
+      typeof parsed.orgId !== "string" ||
+      typeof parsed.apiKey !== "string" ||
+      !isAcceptablePangolinKey(parsed.apiKey) ||
+      !isAcceptableOrgId(parsed.orgId)
+    ) {
+      return null;
+    }
+    return { baseUrl: parsed.baseUrl, orgId: parsed.orgId, apiKey: parsed.apiKey };
+  } catch {
+    return null;
+  }
+}
+
+export function pangolinSessionCookie(session: PangolinCookieSession, request: Request): string {
+  return `${PANGOLIN_COOKIE}=${encodeURIComponent(JSON.stringify(session))}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${SESSION_MAX_AGE}${secureFlag(request)}`;
+}
+
+export function clearPangolinSessionCookie(request: Request): string {
+  return `${PANGOLIN_COOKIE}=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${secureFlag(request)}`;
+}
+
 export function isAcceptableToken(token: string): boolean {
   return token.length >= 20 && token.length <= 400 && /^[\x21-\x7E]+$/.test(token) && !/[;,\s]/.test(token);
+}
+
+export function isAcceptablePangolinKey(token: string): boolean {
+  return token.length >= 20 && token.length <= 500 && /^[\x21-\x7E]+$/.test(token) && !/[;,\s]/.test(token);
+}
+
+export function isAcceptableOrgId(orgId: string): boolean {
+  return orgId.length >= 2 && orgId.length <= 128 && /^[a-zA-Z0-9._-]+$/.test(orgId);
 }
 
 export function assertSameOrigin(request: Request): void {
